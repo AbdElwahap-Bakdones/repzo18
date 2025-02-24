@@ -126,8 +126,10 @@ class OrderEndpoint(http.Controller):
 
                 if picking.state == 'assigned':  # Stock is assigned, now validate
                     for move in picking.move_ids_without_package:
-                        # Set full quantity as done
-                        move.write({'quantity_done': move.product_uom_qty})
+                        for move_line in move.move_line_ids:
+                            # Set qty_done on move lines
+                            move_line.write(
+                                {'qty_done': move_line.product_uom_qty})
                     picking.button_validate()  # Validate the picking (complete delivery)
 
             # Step 4: Create an invoice
