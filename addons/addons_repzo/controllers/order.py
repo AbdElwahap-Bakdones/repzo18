@@ -106,10 +106,10 @@ class OrderEndpoint(http.Controller):
                 'partner_id': validated_data['partner_id'],
                 'order_line': [(0, 0, {
                     'product_id': line['product_id'],
-                    # Default to 1 if quantity not provided
                     'product_uom_qty': line.get('quantity', 1),
                     'price_unit': line['price_unit']
-                }) for line in validated_data['order_line']], }
+                }) for line in validated_data['order_line']],
+            }
 
             order = request.env['sale.order'].create(order_data)
 
@@ -126,10 +126,10 @@ class OrderEndpoint(http.Controller):
 
                 if picking.state == 'assigned':  # Stock is assigned, now validate
                     for move in picking.move_ids_without_package:
+                        move_qty = move.product_uom_qty  # Get quantity from stock.move
                         for move_line in move.move_line_ids:
-                            # Set qty_done on move lines
-                            move_line.write(
-                                {'qty_done': move_line.product_uom_qty})
+                            # Set qty_done on move lines using move's product_uom_qty
+                            move_line.write({'qty_done': move_qty})
                     picking.button_validate()  # Validate the picking (complete delivery)
 
             # Step 4: Create an invoice
