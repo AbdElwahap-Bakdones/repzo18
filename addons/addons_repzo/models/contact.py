@@ -13,7 +13,7 @@ class ResPartner(models.Model):
     )
     payment_type = fields.Char(string="Payment Type", help="credit Or cash")
 
-    id_repzo = fields.Char(string="Repzo Id", required=True)
+    id_repzo = fields.Char(string="Repzo Id")
 
     @api.constrains('email')
     def _check_unique_email(self):
