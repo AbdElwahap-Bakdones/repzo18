@@ -205,19 +205,18 @@ class OrderEndpoint(http.Controller):
 
                     # Process return if any negative quantities exist
                     if return_moves:
-                        return_picking = picking.with_context(
-                            active_ids=picking.ids).action_return_picking()
-                        return_picking = request.env['stock.return.picking'].browse(
-                            return_picking['res_id'])
+                        return_wizard = request.env['stock.return.picking'].with_context(
+                            active_id=picking.id, active_ids=picking.ids
+                        ).create({})
 
-                        for return_move in return_picking.product_return_moves:
+                        for return_move in return_wizard.product_return_moves:
                             for move in return_moves:
                                 if return_move.move_id.id == move['move_id']:
-                                    return_move.write(
-                                        {'quantity': move['quantity']})
+                                    return_move.quantity = move['quantity']
 
-                        return_picking.create_returns()  # Confirm the return
-                        return_pickings.append(return_picking.id)
+                        return_picking = return_wizard.create_returns()  # Create return picking
+                        return_pickings.append(return_picking.get(
+                            'res_id'))  # Store return picking ID
 
             # Step 4: Ensure Picking Validation Before Invoicing
             invoice = None
