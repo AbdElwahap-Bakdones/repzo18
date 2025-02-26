@@ -178,19 +178,19 @@ class OrderEndpoint(http.Controller):
 
             for picking in order.picking_ids:
                 if picking.state == 'draft':
-                    picking.action_confirm()  # Confirm picking if it's in draft
+                    picking.action_confirm()  # Confirm if it's in draft
 
                 if picking.state in ['confirmed', 'waiting', 'assigned']:
-                    picking.action_assign()  # Assign stock (if available)
+                    picking.action_assign()  # Assign stock
 
                 if picking.state == 'assigned':  # Stock is assigned, now validate
                     return_moves = []
                     for move in picking.move_ids_without_package:
                         move_qty = move.product_uom_qty  # Get quantity from stock.move
                         for move_line in move.move_line_ids:
-                            qty_done = move_qty  # Default to moving the full quantity
+                            qty_done = move_qty  # Default full quantity
 
-                            # Check if negative qty_done is provided (meaning a return is needed)
+                            # Handle returns if qty_done is negative
                             if 'qty_done' in validated_data and validated_data['qty_done'] < 0:
                                 return_moves.append({
                                     'move_id': move.id,
@@ -201,12 +201,14 @@ class OrderEndpoint(http.Controller):
                                 # Normal process
                                 move_line.write({'qty_done': qty_done})
 
-                    picking.button_validate()  # Validate the picking (complete delivery)
+                    picking.button_validate()  # Validate delivery
 
                     # Process return if any negative quantities exist
                     if return_moves:
+                        # ✅ Ensure picking is a SINGLE record
                         return_wizard = request.env['stock.return.picking'].with_context(
-                            active_id=picking.id, active_ids=picking.ids
+                            active_id=picking.id, active_ids=[
+                                picking.id]  # Fix: Use list for active_ids
                         ).create({})
 
                         for return_move in return_wizard.product_return_moves:
