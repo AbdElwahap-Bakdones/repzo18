@@ -19,9 +19,6 @@ class OrderLineSchema(Schema):
         "required": "Price unit is required.",
         "invalid": "Price unit must be a valid number."
     })
-    qty_done = fields.Float(required=False, error_messages={
-        "invalid": "Quantity done must be a valid number."
-    })  # Allows tracking actual moved quantity for inventory updates
 
 
 class OrderCreateValidationSchema(Schema):
@@ -31,6 +28,9 @@ class OrderCreateValidationSchema(Schema):
     order_line = fields.List(fields.Nested(OrderLineSchema), required=True, error_messages={
         "required": "Order lines are required."
     })
+    qty_done = fields.Float(required=False, error_messages={
+        "invalid": "Quantity done must be a valid number."
+    })  # Allows tracking actual moved quantity for inventory updates
     date_order = fields.Date(required=False)
     state = fields.Str(required=False, validate=validate.OneOf(
         ["draft", "sent", "sale", "done", "cancel"]
