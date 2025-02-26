@@ -92,6 +92,63 @@ class OrderEndpoint(http.Controller):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    # @http.route('/api/add_order_invoice', type='json', auth='user', methods=['POST'])
+    # def create_order_with_invoice_and_picking(self, **kwargs):
+    #     schema = OrderCreateValidationSchema()
+
+    #     try:
+    #         # Decode and validate the incoming data
+    #         data = json.loads(request.httprequest.data.decode('utf-8'))
+    #         validated_data = schema.load(data)
+
+    #         # Step 1: Create the order
+    #         order_data = {
+    #             'partner_id': validated_data['partner_id'],
+    #             'order_line': [(0, 0, {
+    #                 'product_id': line['product_id'],
+    #                 'product_uom_qty': line.get('quantity', 1),
+    #                 'price_unit': line['price_unit']
+    #             }) for line in validated_data['order_line']],
+    #         }
+
+    #         order = request.env['sale.order'].create(order_data)
+
+    #         # Step 2: Confirm the order
+    #         order.action_confirm()
+
+    #         # Step 3: Validate stock picking (Inventory Movement)
+    #         for picking in order.picking_ids:
+    #             if picking.state == 'draft':
+    #                 picking.action_confirm()  # Confirm picking if it's in draft
+
+    #             if picking.state in ['confirmed', 'waiting', 'assigned']:
+    #                 picking.action_assign()  # Assign stock (if available)
+
+    #             if picking.state == 'assigned':  # Stock is assigned, now validate
+    #                 for move in picking.move_ids_without_package:
+    #                     move_qty = move.product_uom_qty  # Get quantity from stock.move
+    #                     for move_line in move.move_line_ids:
+    #                         # Set qty_done on move lines using move's product_uom_qty
+    #                         move_line.write({'qty_done': move_qty})
+    #                 picking.button_validate()  # Validate the picking (complete delivery)
+
+    #         # Step 4: Create an invoice
+    #         invoice = None
+    #         if order.invoice_status != 'no':
+    #             invoice = order._create_invoices()
+    #             invoice.action_post()  # Post the invoice
+
+    #         return {
+    #             "status": "success",
+    #             "order_id": order.id,
+    #             "invoice_id": invoice.id if invoice else None,
+    #             "picking_ids": [picking.id for picking in order.picking_ids],
+    #         }
+
+    #     except ValidationError as err:
+    #         return {"status": "error", "errors": err.messages}
+    #     except Exception as e:
+    #         return {"status": "error", "message": str(e)}
     @http.route('/api/add_order_invoice', type='json', auth='user', methods=['POST'])
     def create_order_with_invoice_and_picking(self, **kwargs):
         schema = OrderCreateValidationSchema()
@@ -117,6 +174,8 @@ class OrderEndpoint(http.Controller):
             order.action_confirm()
 
             # Step 3: Validate stock picking (Inventory Movement)
+            return_pickings = []  # Store return picking records
+
             for picking in order.picking_ids:
                 if picking.state == 'draft':
                     picking.action_confirm()  # Confirm picking if it's in draft
@@ -125,12 +184,40 @@ class OrderEndpoint(http.Controller):
                     picking.action_assign()  # Assign stock (if available)
 
                 if picking.state == 'assigned':  # Stock is assigned, now validate
+                    return_moves = []
                     for move in picking.move_ids_without_package:
                         move_qty = move.product_uom_qty  # Get quantity from stock.move
                         for move_line in move.move_line_ids:
-                            # Set qty_done on move lines using move's product_uom_qty
-                            move_line.write({'qty_done': move_qty})
+                            qty_done = move_qty  # Default to moving the full quantity
+
+                            # Check if negative qty_done is provided
+                            if 'qty_done' in validated_data and validated_data['qty_done'] < 0:
+                                return_moves.append({
+                                    'move_id': move.id,
+                                    # Convert to positive for return
+                                    'quantity': abs(validated_data['qty_done'])
+                                })
+                            else:
+                                # Normal process
+                                move_line.write({'qty_done': qty_done})
+
                     picking.button_validate()  # Validate the picking (complete delivery)
+
+                    # Process return if any negative quantities exist
+                    if return_moves:
+                        return_picking = picking.with_context(
+                            active_ids=picking.ids).action_return_picking()
+                        return_picking = request.env['stock.return.picking'].browse(
+                            return_picking['res_id'])
+
+                        for return_move in return_picking.product_return_moves:
+                            for move in return_moves:
+                                if return_move.move_id.id == move['move_id']:
+                                    return_move.write(
+                                        {'quantity': move['quantity']})
+
+                        return_picking.create_returns()  # Confirm the return
+                        return_pickings.append(return_picking.id)
 
             # Step 4: Create an invoice
             invoice = None
@@ -143,6 +230,7 @@ class OrderEndpoint(http.Controller):
                 "order_id": order.id,
                 "invoice_id": invoice.id if invoice else None,
                 "picking_ids": [picking.id for picking in order.picking_ids],
+                "return_picking_ids": return_pickings,
             }
 
         except ValidationError as err:
