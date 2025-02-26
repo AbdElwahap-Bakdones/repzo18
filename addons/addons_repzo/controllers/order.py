@@ -117,8 +117,8 @@ class OrderEndpoint(http.Controller):
             order.action_confirm()
 
             # Step 3: Validate stock picking (Inventory Movement)
-            # for picking in order.picking_ids:
-               if picking.state == 'draft':
+            for picking in order.picking_ids:
+                if picking.state == 'draft':
                     picking.action_confirm()  # Confirm picking if it's in draft
 
                 if picking.state in ['confirmed', 'waiting', 'assigned']:
@@ -131,42 +131,6 @@ class OrderEndpoint(http.Controller):
                             # Set qty_done on move lines using move's product_uom_qty
                             move_line.write({'qty_done': move_qty})
                     picking.button_validate()  # Validate the picking (complete delivery)
-            for picking in order.picking_ids:
-                if picking.state == 'draft':
-                    picking.action_confirm()  # Confirm picking if it's in draft
-
-                if picking.state in ['confirmed', 'waiting', 'assigned']:
-                    picking.action_assign()  # Assign stock (if available)
-
-                if picking.state == 'assigned':  # Stock is assigned, now validate
-                    return_moves = []
-                    for move in picking.move_ids_without_package:
-                        move_qty = move.product_uom_qty  # Get quantity from stock.move
-                        for move_line in move.move_line_ids:
-                            qty_done = move_qty  # Default to moving the full quantity
-
-                            # Check if we have negative quantities (returns)
-                            if 'qty_done' in validated_data and validated_data['qty_done'] < 0:
-                                return_moves.append({
-                                    'move_id': move.id,
-                                    # Convert to positive for return
-                                    'quantity': abs(validated_data['qty_done'])
-                                })
-                            else:
-                                # Normal process
-                                move_line.write({'qty_done': qty_done})
-
-                    picking.button_validate()  # Validate the picking (complete delivery)
-
-                    # Process return if any negative quantities exist
-                    if return_moves:
-                        return_picking = picking.with_context(
-                            active_ids=picking.ids).action_return_picking()
-                        return_picking = request.env['stock.return.picking'].browse(
-                            return_picking['res_id'])
-                        return_picking.product_return_moves.write(
-                            {'quantity': return_moves[0]['quantity']})
-                        return_picking.create_returns()  # Confirm the return
 
             # Step 4: Create an invoice
             invoice = None
