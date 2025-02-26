@@ -190,7 +190,7 @@ class OrderEndpoint(http.Controller):
                         for move_line in move.move_line_ids:
                             qty_done = move_qty  # Default to moving the full quantity
 
-                            # Check if negative qty_done is provided
+                            # Check if negative qty_done is provided (meaning a return is needed)
                             if 'qty_done' in validated_data and validated_data['qty_done'] < 0:
                                 return_moves.append({
                                     'move_id': move.id,
@@ -219,11 +219,20 @@ class OrderEndpoint(http.Controller):
                         return_picking.create_returns()  # Confirm the return
                         return_pickings.append(return_picking.id)
 
-            # Step 4: Create an invoice
+            # Step 4: Ensure Picking Validation Before Invoicing
             invoice = None
+            all_pickings_validated = all(
+                picking.state == 'done' for picking in order.picking_ids)
+
             if order.invoice_status != 'no':
-                invoice = order._create_invoices()
-                invoice.action_post()  # Post the invoice
+                if all_pickings_validated:
+                    invoice = order._create_invoices()
+                    invoice.action_post()
+                else:
+                    return {
+                        "status": "error",
+                        "message": "Cannot create an invoice because the delivery is not yet validated."
+                    }
 
             return {
                 "status": "success",
