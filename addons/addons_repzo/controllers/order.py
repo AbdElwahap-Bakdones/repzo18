@@ -92,7 +92,7 @@ class OrderEndpoint(http.Controller):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    @http.route('/api/add_order_invoice', type='json', auth='user', methods=['POST'])
+    @http.route('/api/add_order_invoice1', type='json', auth='user', methods=['POST'])
     def create_order_with_invoice_and_picking(self, **kwargs):
         schema = OrderCreateValidationSchema()
 
